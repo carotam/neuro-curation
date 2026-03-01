@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuro-curation"
+version = "0.1.0"
+description = "Reproducible Neuroimaging Curation & Transfer Pipeline"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Caroline Tamen"},
+]
+keywords = ["neuroimaging", "DICOM", "BIDS", "de-identification", "FAIR"]
+
+dependencies = [
+    "pydicom>=2.4.0",
+    "nibabel>=5.0.0",
+    "jinja2>=3.1.0",
+    "bids-validator>=1.13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.scripts]
+neuro-curation = "neuro_curation.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "requires_dcm2niix: marks tests that need dcm2niix installed",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"

@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Sample data (real DICOM files fetched by download script — too large for git)
+sample_data/raw/
+
+# Pipeline output
+output/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
