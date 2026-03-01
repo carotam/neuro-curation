@@ -48,7 +48,7 @@ PYTHONPATH=src .venv/bin/python -m neuro_curation.cli run \
 
 ### 1. De-identification (`deidentify.py`)
 
-Strips PII from DICOM files per the DICOM PS3.15 Annex E Basic De-identification Profile. Removes direct identifiers (name, DOB, address), quasi-identifiers (age, weight), hospital system links, and vendor-specific private tags. UIDs are replaced consistently across a study.
+Removes PII from DICOM files — direct identifiers (name, DOB, address), quasi-identifiers (age, weight), hospital system links, and vendor-specific private tags — following the DICOM PS3.15 Annex E profile. UIDs are replaced consistently across a study.
 
 `check_xnat_deidentification(path)` reads the `PatientIdentityRemoved` DICOM tag and returns a processing recommendation: `"skip"`, `"verify_only"`, or `"full_deidentify"` — so the pipeline applies the minimum necessary processing rather than blindly re-anonymizing clean files.
 
