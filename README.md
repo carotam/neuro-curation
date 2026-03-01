@@ -6,17 +6,17 @@ Built as a code sample for the UCL Dementia Research Centre Research Data Stewar
 
 ## Where this fits
 
-XNAT handles primary de-identification on ingest via **DicomEdit** scripts, but it **has no native BIDS export** and no built-in FAIR auditing. This pipeline sits downstream of XNAT, filling those gaps:
+Raw DICOM exports from a scanner or imaging archive need several steps before they are ready for analysis or external sharing. This pipeline covers those steps:
 
 ```
-Scanner ──> XNAT (de-id via DicomEdit) ──> Export DICOMs
-                                                │
-                              neuro-curation pipeline:
-                                                │
+Scanner ──> Imaging archive ──> Export DICOMs
+                                      │
+                        neuro-curation pipeline:
+                                      │
                     [deidentify] ──> [convert] ──> BIDS Dataset
-                    (DicomEdit           │
-                     verification +      ├── [verify]  ── SHA-256 manifest
-                     safety net layer)   ├── [audit]   ── FAIR compliance score
+                                         │
+                                         ├── [verify]  ── SHA-256 manifest
+                                         ├── [audit]   ── FAIR compliance score
                                          ├── [metrics] ── KPI dashboard / DMP JSON
                                          └── [report]  ── HTML summary
                                                 │
@@ -48,15 +48,13 @@ PYTHONPATH=src .venv/bin/python -m neuro_curation.cli run \
 
 ### 1. De-identification (`deidentify.py`)
 
-Strips PII from DICOM files per the DICOM PS3.15 Annex E Basic De-identification Profile. In the Insight 46 workflow, this serves as a **DicomEdit verification and safety net layer** — XNAT's DicomEdit handles primary anonymization on ingest, but DicomEdit errors are silent and scripts from older XNAT versions can fail without warning. This module also handles data from non-XNAT sources (collaborators, multi-site transfers) and provides a second pass before external sharing.
+Strips PII from DICOM files per the DICOM PS3.15 Annex E Basic De-identification Profile. Removes direct identifiers (name, DOB, address), quasi-identifiers (age, weight), hospital system links, and vendor-specific private tags. UIDs are replaced consistently across a study.
 
-Removes direct identifiers (name, DOB, address), quasi-identifiers (age, weight — particularly sensitive in the NSHD cohort where all participants were born in a single week of March 1946, making age alone re-identifying), hospital system links, and vendor-specific private tags. UIDs are replaced consistently across a study.
-
-`check_xnat_deidentification(path)` reads the `PatientIdentityRemoved` DICOM tag set by XNAT DicomEdit and returns a recommendation: `"skip"` (DicomEdit confirmed, clean), `"verify_only"` (DicomEdit confirmed but NSHD quasi-identifiers remain), or `"full_deidentify"` (DicomEdit failed or direct identifiers found). This lets the pipeline apply the minimum necessary processing rather than blindly re-anonymizing clean files.
+`check_xnat_deidentification(path)` reads the `PatientIdentityRemoved` DICOM tag and returns a processing recommendation: `"skip"`, `"verify_only"`, or `"full_deidentify"` — so the pipeline applies the minimum necessary processing rather than blindly re-anonymizing clean files.
 
 ### 2. DICOM to BIDS Conversion (`convert.py`)
 
-**Fills the main gap in the XNAT workflow**: XNAT has no native BIDS export (the xnat2bids tooling is incomplete and often fails silently). This module converts DICOM exports to NIfTI using dcm2niix and organizes the output into a BIDS-compliant directory structure. Maps scanner SeriesDescription values to BIDS suffixes (T1_MPRAGE → T1w, FLAIR_3D → FLAIR). Generates required root-level BIDS metadata: `dataset_description.json`, `participants.tsv`, `README`.
+Converts DICOM exports to NIfTI using dcm2niix and organizes the output into a BIDS-compliant directory structure. Maps scanner SeriesDescription values to BIDS suffixes (T1_MPRAGE → T1w, FLAIR_3D → FLAIR). Generates required root-level BIDS metadata: `dataset_description.json`, `participants.tsv`, `README`.
 
 ### 3. Integrity Verification (`verify.py`)
 
@@ -70,11 +68,11 @@ Checks the dataset against the FAIR data principles (Wilkinson et al., 2016):
 - **Interoperable**: BIDS naming convention, compressed NIfTI (.nii.gz), JSON sidecars
 - **Reusable**: LICENSE file, `participants.tsv` with data dictionary
 
-Produces a per-principle score and an overall compliance percentage. Directly relevant to Wellcome Trust and UKRI data management plan requirements.
+Produces a per-principle score and an overall compliance percentage.
 
 ### 5. Pipeline KPI Metrics (`metrics.py`)
 
-Computes the four key performance indicators used to assess pipeline health and dataset quality. Output is a structured dict that can be printed as a text dashboard or saved as JSON for DMP reporting or Alzheimer's Association funder submissions.
+Computes four key performance indicators for pipeline health and dataset quality. Output is a structured dict that can be printed as a text dashboard or saved as JSON for DMP reporting.
 
 | KPI | Measurement | Target |
 |-----|-------------|--------|
@@ -122,7 +120,7 @@ make lint     # ruff check + format check
 
 Tests use **inline synthetic DICOM files** (created in `tests/conftest.py`) with deliberately planted PII tags. No external data, no internet, no dcm2niix required for unit tests. One integration test (full DICOM → BIDS conversion) requires dcm2niix.
 
-The `check_xnat_deidentification()` function is tested with synthetic DICOM files that simulate three scenarios: clean DicomEdit output, DicomEdit output with residual NSHD quasi-identifiers, and files with no DicomEdit markers at all.
+The `check_xnat_deidentification()` function is tested with synthetic DICOM files simulating three scenarios: confirmed clean output, confirmed but with residual quasi-identifiers, and files with no de-identification markers at all.
 
 ## Dependencies
 
@@ -134,16 +132,12 @@ The `check_xnat_deidentification()` function is tested with synthetic DICOM file
 | `bids-validator` | Validate BIDS filename conventions |
 | `dcm2niix` | DICOM → NIfTI conversion (external binary, `brew install dcm2niix`) |
 
-## Relevance to Insight 46
+## Sample Data
 
-This pipeline addresses gaps in the current XNAT-based workflow at the DRC:
+The demo uses public DICOM test data from [dcm_qa_nih](https://github.com/neurolabusc/dcm_qa_nih) (Chris Rorden / dcm2niix), covering GE, Philips, and Siemens scanner series. The raw files are gitignored — run `make download` to fetch them locally.
 
-1. **XNAT → BIDS**: XNAT has no native BIDS export. The conversion module produces BIDS-compliant datasets ready for analysis with fmriprep, FreeSurfer, and other BIDS apps. BIDS adoption reduces per-cohort preparation time from ~6 hours to ~30 minutes for federated networks (Fang et al., 2023, GAAIN/DPUK/ADDI).
-2. **Transfer to DPUK/GAAIN**: The integrity verification module generates SHA-256 manifests to confirm data survives transit. The FAIR audit confirms the dataset meets funder requirements before sending.
-3. **DicomEdit verification**: XNAT's DicomEdit handles primary anonymization on ingest, but this module reads the `PatientIdentityRemoved` tag to confirm DicomEdit ran — and applies a full safety-net pass if it failed or missed residual tags. Particularly important for the NSHD cohort where even age is quasi-identifying (all participants born in one week in March 1946).
-4. **KPI monitoring**: The metrics module produces a JSON-serialisable dashboard of four pipeline KPIs (BIDS validation rate, checksum match rate, FAIR score, metadata completeness). These provide evidence for Alzheimer's Association data-sharing obligations and UKRI data management plan reporting.
-5. **Documentation**: The HTML report accompanies each transfer, giving the receiving team (DPUK, GAAIN, Skylark) an instant overview without specialised tools.
+This mirrors real-world practice where raw imaging data lives on dedicated servers rather than in code repositories.
 
-**Version control**: For longitudinal studies like Insight 46 with multiple waves (phases 1–3), data + code versioning via DataLad (Halchenko et al., 2021) is recommended alongside this pipeline. DataLad provides DOI-tagged derivative releases and reproducible re-runs across waves — complementing the JSONL audit logs that neuro-curation generates.
+## Design Rationale
 
-Every module is independently usable, heavily commented for educational value, and tested with zero external setup.
+This pipeline addresses the main gaps in an XNAT-based neuroimaging workflow: XNAT has no native BIDS export, and external transfers to networks like DPUK and GAAIN require integrity verification and FAIR compliance checks that XNAT doesn't provide. Every module is independently usable and tested with zero external setup.
