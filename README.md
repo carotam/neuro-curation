@@ -97,6 +97,10 @@ Sections:
 - **FAIR compliance**: per-principle breakdown (F/A/I/R) with an actionable fix hint below each failing check.
 - **File listing** (collapsible): all files with sizes.
 
+![HTML report screenshot](docs/html_header_report.png)
+
+[View sample report (PDF)](docs/report.pdf)
+
 ### CLI (`cli.py`)
 
 ```
